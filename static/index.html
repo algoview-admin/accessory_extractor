@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>アクセサリー抽出ツール</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #1a1a1a; color: #eee; padding: 28px; }
+h1 { font-size: 22px; margin-bottom: 20px; }
+
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 12px; color: #aaa; margin-bottom: 5px; }
+.field input { padding: 8px 12px; background: #2d2d2d; border: 1px solid #555; border-radius: 6px; color: #fff; font-size: 14px; width: 280px; }
+
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab-btn { padding: 9px 18px; background: #2a2a2a; border: 1px solid #444; border-bottom: none; color: #888; cursor: pointer; border-radius: 6px 6px 0 0; font-size: 13px; }
+.tab-btn.active { background: #2d2d2d; color: #fff; border-color: #555; }
+
+.tab-panel { display: none; background: #2d2d2d; border: 1px solid #555; border-radius: 0 8px 8px 8px; padding: 24px; }
+.tab-panel.active { display: block; }
+
+.desc { font-size: 13px; color: #888; margin-bottom: 16px; }
+
+.upload-area {
+  border: 2px dashed #555; border-radius: 8px; padding: 36px 20px;
+  text-align: center; cursor: pointer; transition: border-color .2s;
+  margin-bottom: 14px; font-size: 14px; color: #aaa;
+}
+.upload-area:hover, .upload-area.over { border-color: #888; color: #ccc; }
+.upload-area input[type=file] { display: none; }
+.upload-hint { font-size: 12px; color: #666; margin-top: 6px; }
+
+.row-btns { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+.btn-run { padding: 10px 22px; background: #c94e22; border: none; color: #fff; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-run:hover { background: #a83e1a; }
+
+.images-grid { display: grid; gap: 14px; margin-top: 16px; }
+.images-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.images-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+.img-card { background: #1e1e1e; border-radius: 8px; overflow: hidden; }
+.img-card h4 { font-size: 11px; color: #888; padding: 7px 10px; background: #252525; text-transform: uppercase; letter-spacing: .5px; }
+.img-wrap {
+  min-height: 160px; display: flex; align-items: center; justify-content: center;
+  background-image: linear-gradient(45deg,#2a2a2a 25%,transparent 25%),
+                    linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),
+                    linear-gradient(45deg,transparent 75%,#2a2a2a 75%),
+                    linear-gradient(-45deg,transparent 75%,#2a2a2a 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-color: #1e1e1e;
+}
+.img-wrap img { max-width: 100%; max-height: 360px; display: block; }
+.img-card-foot { padding: 8px 10px; }
+.btn-dl { padding: 6px 14px; background: #1e3a6e; border: none; color: #7eb3ff; border-radius: 5px; cursor: pointer; font-size: 12px; }
+.btn-dl:hover { background: #254d96; }
+
+.status { margin-top: 14px; padding: 10px 14px; background: #1a1a1a; border-radius: 6px; font-size: 13px; white-space: pre-wrap; min-height: 36px; }
+.status.ok { color: #4ade80; }
+.status.err { color: #f87171; }
+.status.busy { color: #aaa; }
+
+.canvas-wrap {
+  position: relative; display: inline-block; max-width: 100%;
+  cursor: crosshair; user-select: none;
+}
+.canvas-wrap img { display: block; max-width: 100%; max-height: 420px; pointer-events: none; }
+.canvas-wrap canvas { position: absolute; top: 0; left: 0; }
+.btn-clear { padding: 7px 14px; background: #333; border: 1px solid #555; color: #ccc; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.btn-clear:hover { background: #444; }
+.box-hint { font-size: 12px; color: #666; }
+.dark-remove-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; font-size:13px; }
+.dark-remove-row input[type=range] { width:120px; accent-color:#f97316; }
+.dark-remove-row .thresh-val { color:#f97316; font-weight:600; min-width:28px; }
+</style>
+</head>
+<body>
+<h1>アクセサリー抽出ツール</h1>
+
+<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+  <div class="field" style="margin-bottom:0">
+    <label>商品ID（ファイルアップロード時は自動入力）</label>
+    <input type="text" id="product-id" placeholder="例: er149886">
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('manual',this)">方法A：手動クロップ + rembg</button>
+  <button class="tab-btn" onclick="switchTab('sam2',this)">方法B：SAM2（矩形指定）</button>
+  <button class="tab-btn" onclick="switchTab('gemini',this)">方法C：Gemini自動検出</button>
+</div>
+
+<!-- 方法A：手動クロップ + rembg -->
+<div id="panel-manual" class="tab-panel active">
+  <p class="desc">
+    画像をアップロード後、ドラッグで範囲を指定 → rembgで背景除去<br>
+    範囲指定なしの場合は画像全体を処理します。Ctrl+V で貼り付け可
+  </p>
+  <div class="upload-area" id="drop-manual" onclick="document.getElementById('file-manual').click()">
+    <input type="file" id="file-manual" accept="image/*" onchange="onFile(event,'manual')">
+    クリック または ドラッグ&amp;ドロップ で画像を選択
+    <div class="upload-hint">JPG / PNG / WEBP</div>
+  </div>
+  <div class="dark-remove-row">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="manual-dark-enable" onchange="updateDarkLabel('manual')">
+      黒スタンド・マネキン除去
+    </label>
+    <span id="manual-dark-wrap" style="display:none;align-items:center;gap:6px;display:none">
+      閾値:
+      <input type="range" id="manual-dark-range" min="20" max="120" value="60"
+             oninput="document.getElementById('manual-dark-val').textContent=this.value">
+      <span class="thresh-val" id="manual-dark-val">60</span>
+      <span style="color:#666;font-size:11px">（低=保守的 / 高=積極的除去）</span>
+    </span>
+  </div>
+  <div class="row-btns">
+    <button class="btn-run" onclick="runManual()">rembgで背景除去</button>
+    <button class="btn-clear" onclick="clearBox('manual')">矩形をクリア</button>
+    <span class="box-hint" id="manual-box-hint"></span>
+  </div>
+  <div id="manual-editor" style="display:none">
+    <div class="canvas-wrap">
+      <img id="img-manual-src" src="" onload="initCanvas('manual')">
+      <canvas id="manual-canvas"></canvas>
+    </div>
+  </div>
+  <div class="images-grid cols-1" id="imgs-manual" style="display:none;max-width:480px">
+    <div class="img-card"><h4>出力画像（透明PNG）</h4><div class="img-wrap"><img id="img-manual-out" src=""></div>
+      <div class="img-card-foot"><button class="btn-dl" onclick="dlImage('manual')">↓ PNGダウンロード</button></div></div>
+  </div>
+  <div class="status" id="st-manual"></div>
+</div>
+
+<!-- 方法B：SAM2 -->
+<div id="panel-sam2" class="tab-panel">
+  <p class="desc">
+    ① ドラッグで矩形を描く → ② 必要に応じて前景点を追加クリック → SAM2で抽出<br>
+    前景点は矩形だけで検出しきれない部分を補完できます。Ctrl+V で貼り付け可
+  </p>
+  <div class="upload-area" id="drop-sam2" onclick="document.getElementById('file-sam2').click()">
+    <input type="file" id="file-sam2" accept="image/*" onchange="onFile(event,'sam2')">
+    クリック または ドラッグ&amp;ドロップ で画像を選択
+    <div class="upload-hint">JPG / PNG / WEBP</div>
+  </div>
+  <div class="row-btns">
+    <button class="btn-run" onclick="runSam2()">SAM2で抽出</button>
+    <button class="btn-clear" onclick="clearBox('sam2')">矩形をクリア</button>
+    <button class="btn-clear" onclick="clearSam2Points()">点をクリア</button>
+    <span class="box-hint" id="sam2-box-hint"></span>
+  </div>
+  <div id="sam2-editor" style="display:none">
+    <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
+      <span style="font-size:12px;color:#888">操作モード:</span>
+      <div style="display:flex;border-radius:6px;overflow:hidden;border:1px solid #555">
+        <button id="sam2-mode-box" onclick="setSam2Mode('box')"
+          style="padding:5px 14px;background:#22c55e;color:#000;border:none;cursor:pointer;font-size:12px;font-weight:600">
+          ▭ 矩形
+        </button>
+        <button id="sam2-mode-point" onclick="setSam2Mode('point')"
+          style="padding:5px 14px;background:#2a2a2a;color:#888;border:none;cursor:pointer;font-size:12px;font-weight:600">
+          ● 前景点
+        </button>
+      </div>
+      <span style="font-size:11px;color:#555">前景点モード：クリックで追加 / 右クリックで削除</span>
+    </div>
+    <div class="canvas-wrap">
+      <img id="img-sam2-src" src="" onload="initCanvas('sam2')">
+      <canvas id="sam2-canvas"></canvas>
+    </div>
+  </div>
+  <div class="images-grid cols-2" id="imgs-sam2" style="display:none">
+    <div class="img-card"><h4>マスクプレビュー</h4><div class="img-wrap"><img id="img-sam2-preview" src=""></div></div>
+    <div class="img-card"><h4>出力画像（透明PNG）</h4><div class="img-wrap"><img id="img-sam2-out" src=""></div>
+      <div class="img-card-foot"><button class="btn-dl" onclick="dlImage('sam2')">↓ PNGダウンロード</button></div></div>
+  </div>
+  <div class="status" id="st-sam2"></div>
+</div>
+
+<!-- 方法C：Gemini自動検出 -->
+<div id="panel-gemini" class="tab-panel">
+  <p class="desc">Geminiがアクセサリー位置を自動検出 → 元画像をクロップ → rembgで背景除去。<br>Ctrl+V で貼り付け可</p>
+  <div class="upload-area" id="drop-gemini" onclick="document.getElementById('file-gemini').click()">
+    <input type="file" id="file-gemini" accept="image/*" onchange="onFile(event,'gemini')">
+    クリック または ドラッグ&amp;ドロップ で画像を選択
+    <div class="upload-hint">JPG / PNG / WEBP</div>
+  </div>
+  <div class="dark-remove-row">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="gemini-dark-enable" onchange="updateDarkLabel('gemini')">
+      黒スタンド・マネキン除去
+    </label>
+    <span id="gemini-dark-wrap" style="display:none;align-items:center;gap:6px">
+      閾値:
+      <input type="range" id="gemini-dark-range" min="20" max="120" value="60"
+             oninput="document.getElementById('gemini-dark-val').textContent=this.value">
+      <span class="thresh-val" id="gemini-dark-val">60</span>
+      <span style="color:#666;font-size:11px">（低=保守的 / 高=積極的除去）</span>
+    </span>
+  </div>
+  <div class="row-btns">
+    <button class="btn-run" onclick="runGemini()">Geminiで自動抽出</button>
+  </div>
+  <div class="images-grid cols-3" id="imgs-gemini" style="display:none">
+    <div class="img-card"><h4>入力画像</h4><div class="img-wrap"><img id="img-gemini-in" src=""></div></div>
+    <div class="img-card"><h4>検出bbox（オレンジ枠）</h4><div class="img-wrap"><img id="img-gemini-bbox" src=""></div></div>
+    <div class="img-card"><h4>出力画像（透明PNG）</h4><div class="img-wrap"><img id="img-gemini-out" src=""></div>
+      <div class="img-card-foot"><button class="btn-dl" onclick="dlImage('gemini')">↓ PNGダウンロード</button></div></div>
+  </div>
+  <div class="status" id="st-gemini"></div>
+</div>
+
+<script>
+const state = {
+  gemini: { file: null, b64: null },
+  manual: { file: null, b64: null, box: null, origW: 0, origH: 0 },
+  sam2:   { file: null, b64: null, box: null, origW: 0, origH: 0, points: [], mode: 'box' },
+};
+let lastFile = null;
+const BOX_HINTS = {
+  manual: { none: 'ドラッグで範囲指定（しない場合は全体を処理）',        set: b => `範囲指定済み (${b.x1},${b.y1})-(${b.x2},${b.y2}) px` },
+  sam2:   { none: '画像上でドラッグして抽出範囲を指定してください',       set: b => `範囲指定済み (${b.x1},${b.y1})-(${b.x2},${b.y2}) px` },
+};
+
+function activeTab() { return document.querySelector('.tab-panel.active').id.replace('panel-',''); }
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  if (lastFile && !state[name].file) setFile(name, lastFile);
+}
+function productId() { return document.getElementById('product-id').value.trim(); }
+function extractPid(fn) { const b = fn.replace(/\.[^/.]+$/,''); return b.substring(0, /^\d/.test(b)?6:8); }
+
+function setFile(tab, file) {
+  lastFile = file;
+  state[tab].file = file;
+  if (file.name && file.name !== 'clipboard.png') document.getElementById('product-id').value = extractPid(file.name);
+  if (tab === 'manual' || tab === 'sam2') { loadCanvasImage(tab, file); return; }
+  const r = new FileReader();
+  r.onload = e => { document.getElementById('img-gemini-in').src = e.target.result; document.getElementById('imgs-gemini').style.display='grid'; };
+  r.readAsDataURL(file);
+}
+function onFile(e, tab) { if (e.target.files[0]) setFile(tab, e.target.files[0]); }
+
+// Ctrl+V
+const trap = document.createElement('textarea');
+trap.style.cssText = 'position:fixed;top:-200px;left:-200px;width:1px;height:1px;opacity:0;';
+document.body.appendChild(trap);
+function focusTrap(e) { if(e?.target?.tagName==='SELECT') return; const t=document.activeElement?.tagName; if(t!=='INPUT'&&t!=='TEXTAREA'&&t!=='SELECT'||document.activeElement===trap) trap.focus(); }
+focusTrap();
+document.addEventListener('click', focusTrap);
+document.addEventListener('keydown', focusTrap);
+trap.addEventListener('paste', e => {
+  const img=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'));
+  if(!img) return; e.preventDefault();
+  setFile(activeTab(), new File([img.getAsFile()],'clipboard.png',{type:img.type}));
+});
+
+// ドロップ（アップロードエリア）
+['gemini','manual','sam2'].forEach(tab => {
+  const area = document.getElementById('drop-'+tab);
+  area.addEventListener('dragover', e=>{e.preventDefault();area.classList.add('over');});
+  area.addEventListener('dragleave', ()=>area.classList.remove('over'));
+  area.addEventListener('drop', e=>{e.preventDefault();area.classList.remove('over');if(e.dataTransfer.files[0])setFile(tab,e.dataTransfer.files[0]);});
+});
+
+function setStatus(tab, msg, cls) { const el=document.getElementById('st-'+tab); el.textContent=msg; el.className='status '+(cls||''); }
+
+// キャンバス共通
+function loadCanvasImage(tab, file) {
+  const r = new FileReader();
+  r.onload = e => {
+    const tmp = new Image();
+    tmp.onload = () => { state[tab].origW=tmp.naturalWidth; state[tab].origH=tmp.naturalHeight; };
+    tmp.src = e.target.result;
+    document.getElementById(`img-${tab}-src`).src = e.target.result;
+    document.getElementById(`${tab}-editor`).style.display = 'block';
+    document.getElementById(`${tab}-box-hint`).textContent = BOX_HINTS[tab].none;
+    state[tab].box = null;
+    if (tab === 'sam2') { state.sam2.points = []; state.sam2.mode = 'box'; setSam2Mode('box'); }
+  };
+  r.readAsDataURL(file);
+}
+function initCanvas(tab) {
+  const img=document.getElementById(`img-${tab}-src`), cv=document.getElementById(`${tab}-canvas`);
+  cv.width=img.clientWidth; cv.height=img.clientHeight; drawBox(tab);
+}
+function clearBox(tab) {
+  state[tab].box=null; drawBox(tab);
+  document.getElementById(`${tab}-box-hint`).textContent=BOX_HINTS[tab].none;
+}
+function clearSam2Points() { state.sam2.points=[]; drawBox('sam2'); }
+
+function setSam2Mode(mode) {
+  state.sam2.mode = mode;
+  const boxBtn   = document.getElementById('sam2-mode-box');
+  const pointBtn = document.getElementById('sam2-mode-point');
+  if (mode === 'box') {
+    boxBtn.style.background='#22c55e'; boxBtn.style.color='#000';
+    pointBtn.style.background='#2a2a2a'; pointBtn.style.color='#888';
+    document.getElementById('sam2-canvas').style.cursor='crosshair';
+  } else {
+    pointBtn.style.background='#3b82f6'; pointBtn.style.color='#fff';
+    boxBtn.style.background='#2a2a2a'; boxBtn.style.color='#888';
+    document.getElementById('sam2-canvas').style.cursor='cell';
+  }
+}
+
+function drawBox(tab) {
+  const img=document.getElementById(`img-${tab}-src`), cv=document.getElementById(`${tab}-canvas`);
+  cv.width=img.clientWidth; cv.height=img.clientHeight;
+  const ctx=cv.getContext('2d');
+  const sx=img.clientWidth/(state[tab].origW||1), sy=img.clientHeight/(state[tab].origH||1);
+
+  const b=state[tab].box;
+  if(b){
+    const dx1=b.x1*sx, dy1=b.y1*sy, dx2=b.x2*sx, dy2=b.y2*sy;
+    ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.clearRect(dx1,dy1,dx2-dx1,dy2-dy1);
+    ctx.strokeStyle='#22c55e'; ctx.lineWidth=2; ctx.setLineDash([6,3]);
+    ctx.strokeRect(dx1,dy1,dx2-dx1,dy2-dy1); ctx.setLineDash([]);
+    ctx.fillStyle='#22c55e';
+    [[dx1,dy1],[dx2,dy1],[dx1,dy2],[dx2,dy2]].forEach(([cx,cy])=>ctx.fillRect(cx-4,cy-4,8,8));
+  }
+
+  // SAM2 前景点
+  if(tab==='sam2'){
+    (state.sam2.points||[]).forEach(p=>{
+      const dx=p[0]*sx, dy=p[1]*sy;
+      ctx.beginPath(); ctx.arc(dx,dy,7,0,Math.PI*2);
+      ctx.fillStyle='rgba(59,130,246,0.9)'; ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+      ctx.fill(); ctx.stroke();
+    });
+  }
+}
+
+// ドラッグ矩形（manual / sam2 共通）
+const _drag={};
+['manual','sam2'].forEach(tab=>{
+  _drag[tab]={active:false,start:null};
+  const cv=document.getElementById(`${tab}-canvas`);
+
+  cv.addEventListener('mousedown', e=>{
+    if(e.button!==0) return; e.preventDefault();
+    const img=document.getElementById(`img-${tab}-src`);
+    if(!img.src||img.src===window.location.href) return;
+    // SAM2 前景点モード: クリックで点追加
+    if(tab==='sam2' && state.sam2.mode==='point'){
+      const rect=cv.getBoundingClientRect();
+      const sx=(state.sam2.origW||1)/img.clientWidth, sy=(state.sam2.origH||1)/img.clientHeight;
+      state.sam2.points.push([
+        Math.round((e.clientX-rect.left)*sx),
+        Math.round((e.clientY-rect.top)*sy),
+      ]);
+      drawBox('sam2'); return;
+    }
+    _drag[tab].active=true;
+    const rect=cv.getBoundingClientRect();
+    const sx=(state[tab].origW||1)/img.clientWidth, sy=(state[tab].origH||1)/img.clientHeight;
+    _drag[tab].start={x:Math.round((e.clientX-rect.left)*sx), y:Math.round((e.clientY-rect.top)*sy)};
+    state[tab].box=null;
+  });
+
+  cv.addEventListener('contextmenu', e=>{
+    if(tab!=='sam2'||state.sam2.mode!=='point') return;
+    e.preventDefault();
+    const img=document.getElementById('img-sam2-src'), rect=cv.getBoundingClientRect();
+    const sx=(state.sam2.origW||1)/img.clientWidth, sy=(state.sam2.origH||1)/img.clientHeight;
+    const cx=(e.clientX-rect.left)*sx, cy=(e.clientY-rect.top)*sy;
+    let minD=Infinity, minI=-1;
+    state.sam2.points.forEach(([px,py],i)=>{ const d=Math.hypot(px-cx,py-cy); if(d<minD){minD=d;minI=i;} });
+    if(minI>=0 && minD<40*sx){ state.sam2.points.splice(minI,1); drawBox('sam2'); }
+  });
+
+  cv.addEventListener('mousemove', e=>{
+    if(!_drag[tab].active) return;
+    const img=document.getElementById(`img-${tab}-src`), rect=cv.getBoundingClientRect();
+    const sx=(state[tab].origW||1)/img.clientWidth, sy=(state[tab].origH||1)/img.clientHeight;
+    const cx=Math.round((e.clientX-rect.left)*sx), cy=Math.round((e.clientY-rect.top)*sy);
+    const s=_drag[tab].start;
+    state[tab].box={x1:Math.min(s.x,cx),y1:Math.min(s.y,cy),x2:Math.max(s.x,cx),y2:Math.max(s.y,cy)};
+    drawBox(tab);
+  });
+  function endDrag(){
+    if(!_drag[tab].active) return; _drag[tab].active=false; _drag[tab].start=null;
+    const b=state[tab].box;
+    if(b&&(b.x2-b.x1)>5&&(b.y2-b.y1)>5) document.getElementById(`${tab}-box-hint`).textContent=BOX_HINTS[tab].set(b);
+    else { state[tab].box=null; drawBox(tab); }
+  }
+  cv.addEventListener('mouseup', endDrag);
+  cv.addEventListener('mouseleave', endDrag);
+});
+
+function updateDarkLabel(tab) {
+  const enabled = document.getElementById(`${tab}-dark-enable`).checked;
+  const wrap = document.getElementById(`${tab}-dark-wrap`);
+  wrap.style.display = enabled ? 'flex' : 'none';
+}
+function getDarkThreshold(tab) {
+  if (!document.getElementById(`${tab}-dark-enable`).checked) return '';
+  return document.getElementById(`${tab}-dark-range`).value;
+}
+
+// 方法A（Gemini）
+async function runGemini(){
+  if(!state.gemini.file){alert('画像を選択してください');return;}
+  setStatus('gemini','処理中...','busy');
+  const fd=new FormData();
+  fd.append('file',state.gemini.file);
+  fd.append('product_id',productId());
+  fd.append('dark_threshold',getDarkThreshold('gemini'));
+  try{
+    const d=await fetch('/extract/gemini',{method:'POST',body:fd}).then(r=>r.json());
+    if(d.error){setStatus('gemini','エラー: '+d.error,'err');return;}
+    document.getElementById('img-gemini-bbox').src=d.preview;
+    document.getElementById('img-gemini-out').src=d.output;
+    document.getElementById('imgs-gemini').style.display='grid';
+    state.gemini.b64=d.output;
+    setStatus('gemini',d.saved?'完了\n保存: '+d.saved:'完了（商品ID未入力 → 保存スキップ）','ok');
+  }catch(e){setStatus('gemini','エラー: '+e.message,'err');}
+}
+
+// 方法B（rembg）
+async function runManual(){
+  if(!state.manual.file){alert('画像を選択してください');return;}
+  setStatus('manual','処理中...','busy');
+  const fd=new FormData();
+  fd.append('file',state.manual.file);
+  fd.append('product_id',productId());
+  fd.append('dark_threshold',getDarkThreshold('manual'));
+  const b=state.manual.box; fd.append('box',b?JSON.stringify([b.x1,b.y1,b.x2,b.y2]):'[]');
+  try{
+    const d=await fetch('/extract/manual',{method:'POST',body:fd}).then(r=>r.json());
+    if(d.error){setStatus('manual','エラー: '+d.error,'err');return;}
+    document.getElementById('img-manual-out').src=d.output;
+    document.getElementById('imgs-manual').style.display='grid';
+    state.manual.b64=d.output;
+    setStatus('manual',d.saved?'完了\n保存: '+d.saved:'完了（商品ID未入力 → 保存スキップ）','ok');
+  }catch(e){setStatus('manual','エラー: '+e.message,'err');}
+}
+
+// 方法C
+async function runSam2(){
+  if(!state.sam2.file){alert('画像を選択してください');return;}
+  if(!state.sam2.box){alert('アクセサリーをドラッグで囲んでください');return;}
+  const {x1,y1,x2,y2}=state.sam2.box;
+  setStatus('sam2','SAM2処理中（初回はモデルのロードに1〜2分かかります）...','busy');
+  const fd=new FormData(); fd.append('file',state.sam2.file); fd.append('box',JSON.stringify([x1,y1,x2,y2])); fd.append('product_id',productId()); fd.append('points',JSON.stringify(state.sam2.points||[]));
+  try{
+    const d=await fetch('/extract/sam2',{method:'POST',body:fd}).then(r=>r.json());
+    if(d.error){setStatus('sam2','エラー: '+d.error,'err');return;}
+    document.getElementById('img-sam2-preview').src=d.preview;
+    document.getElementById('img-sam2-out').src=d.output;
+    document.getElementById('imgs-sam2').style.display='grid';
+    state.sam2.b64=d.output;
+    setStatus('sam2',d.saved?'完了\n保存: '+d.saved:'完了（商品ID未入力 → 保存スキップ）','ok');
+  }catch(e){setStatus('sam2','エラー: '+e.message,'err');}
+}
+
+// ダウンロード
+function dlImage(tab){
+  const b64=state[tab].b64;
+  if(!b64){alert('先に抽出処理を実行してください。');return;}
+  const a=document.createElement('a'); a.href=b64; a.download=(productId()||'earring')+'_extracted.png'; a.click();
+}
+</script>
+</body>
+</html>

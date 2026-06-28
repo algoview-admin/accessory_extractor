@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accessory Extractor — System Flowchart</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #1a1a1a; color: #eee; padding: 40px 32px;
+}
+h1 { font-size: 24px; margin-bottom: 6px; }
+.subtitle { font-size: 14px; color: #666; margin-bottom: 48px; }
+
+.section { margin-bottom: 56px; }
+.section-title {
+  font-size: 11px; color: #666; letter-spacing: 2px;
+  text-transform: uppercase; border-bottom: 1px solid #2a2a2a;
+  padding-bottom: 10px; margin-bottom: 24px;
+}
+
+.methods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+@media (max-width: 900px) { .methods { grid-template-columns: 1fr; } }
+
+.method-card {
+  background: #222; border-radius: 12px; padding: 24px;
+  border-top: 3px solid transparent;
+}
+.method-a { border-top-color: #22c55e; }
+.method-b { border-top-color: #3b82f6; }
+.method-c { border-top-color: #f59e0b; }
+
+.method-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+.method-a .method-title { color: #22c55e; }
+.method-b .method-title { color: #3b82f6; }
+.method-c .method-title { color: #f59e0b; }
+.method-sub { font-size: 11px; color: #555; margin-bottom: 20px; font-family: monospace; }
+
+.mermaid { display: flex; justify-content: center; }
+</style>
+</head>
+<body>
+
+<h1>Accessory Extractor</h1>
+<p class="subtitle">System &amp; Algorithm Flowchart</p>
+
+<!-- ① System Architecture -->
+<div class="section">
+  <div class="section-title">System Architecture</div>
+  <div class="mermaid">
+flowchart LR
+  Browser["🖥️ ブラウザ\nindex.html"]
+  Server["⚙️ FastAPI\nserver.py :8080"]
+  ModA["extract_acc_rembg.py"]
+  ModB["extract_acc_sam2.py"]
+  ModC["extract_acc_gemini.py"]
+  Out(["🖼️ 透明PNG\nBase64レスポンス"])
+
+  Browser -- "画像 + パラメータ" --> Server
+  Server -- "POST /extract/manual" --> ModA
+  Server -- "POST /extract/sam2"   --> ModB
+  Server -- "POST /extract/gemini" --> ModC
+  ModA --> Out
+  ModB --> Out
+  ModC --> Out
+
+  style Browser fill:#1e1e2e,stroke:#4444aa,color:#a0a0e0
+  style Server fill:#2d2d2d,stroke:#555,color:#eee
+  style ModA fill:#1a2e1a,stroke:#22c55e,color:#86efac
+  style ModB fill:#1a1a2e,stroke:#3b82f6,color:#93c5fd
+  style ModC fill:#2e2a1a,stroke:#f59e0b,color:#fde68a
+  style Out fill:#1a1a2e,stroke:#3730a3,color:#a5b4fc
+  </div>
+</div>
+
+<!-- ② Method Flowcharts -->
+<div class="section">
+  <div class="section-title">Extraction Methods</div>
+  <div class="methods">
+
+    <!-- Method A: rembg -->
+    <div class="method-card method-a">
+      <div class="method-title">方法A: 手動クロップ + rembg</div>
+      <div class="method-sub">extract_acc_rembg.py</div>
+      <div class="mermaid">
+flowchart TD
+  A1(["📁 画像アップロード"])
+  A2["🖱️ 矩形ドラッグ\n（任意）"]
+  A3["POST /extract/manual"]
+  A4{"範囲指定\nあり？"}
+  A5["クロップ\n指定座標で切り出し"]
+  A6["rembg 背景除去\nU²-Net"]
+  A7{"黒ピクセル\n除去 ON？"}
+  A8["暗ピクセルを透明化\n（RGB ≤ 閾値）"]
+  A9["タイトクロップ\n（α>10 の最小矩形）"]
+  A10(["✅ 透明PNG 出力"])
+
+  A1 --> A2 --> A3 --> A4
+  A4 -- Yes --> A5 --> A6
+  A4 -- No  --> A6
+  A6 --> A7
+  A7 -- Yes --> A8 --> A9
+  A7 -- No  --> A9 --> A10
+
+  style A1  fill:#1e1e2e,stroke:#444,color:#aaa
+  style A2  fill:#1e1e2e,stroke:#444,color:#aaa
+  style A3  fill:#2d2d2d,stroke:#22c55e,color:#86efac
+  style A4  fill:#2a2e1a,stroke:#666,color:#fde68a
+  style A5  fill:#2d2d2d,stroke:#444,color:#eee
+  style A6  fill:#2d2d2d,stroke:#444,color:#eee
+  style A7  fill:#2a2e1a,stroke:#666,color:#fde68a
+  style A8  fill:#2d2d2d,stroke:#444,color:#eee
+  style A9  fill:#2d2d2d,stroke:#444,color:#eee
+  style A10 fill:#1a1a2e,stroke:#3730a3,color:#a5b4fc
+      </div>
+    </div>
+
+    <!-- Method B: SAM2 -->
+    <div class="method-card method-b">
+      <div class="method-title">方法B: SAM2（矩形 + 前景点）</div>
+      <div class="method-sub">extract_acc_sam2.py</div>
+      <div class="mermaid">
+flowchart TD
+  B1(["📁 画像アップロード"])
+  B2["🖱️ 矩形ドラッグ\n（必須）"]
+  B3["🔵 前景点クリック\n（任意・複数可）"]
+  B4["POST /extract/sam2"]
+  B5["SAM2ImagePredictor\nset_image(arr)"]
+  B6["predictor.predict\nbox + point_coords\n+ point_labels"]
+  B7["マスクを RGBA に適用\nmask × 255 → alpha ch"]
+  B8["タイトクロップ\n（α>10 の最小矩形）"]
+  B9["マスクオーバーレイ\nプレビュー生成"]
+  B10(["✅ 透明PNG + プレビュー 出力"])
+
+  B1 --> B2 --> B3 --> B4 --> B5 --> B6 --> B7 --> B8 --> B9 --> B10
+
+  style B1  fill:#1e1e2e,stroke:#444,color:#aaa
+  style B2  fill:#1e1e2e,stroke:#444,color:#aaa
+  style B3  fill:#1e1e2e,stroke:#444,color:#aaa
+  style B4  fill:#2d2d2d,stroke:#3b82f6,color:#93c5fd
+  style B5  fill:#2d2d2d,stroke:#444,color:#eee
+  style B6  fill:#2d2d2d,stroke:#444,color:#eee
+  style B7  fill:#2d2d2d,stroke:#444,color:#eee
+  style B8  fill:#2d2d2d,stroke:#444,color:#eee
+  style B9  fill:#2d2d2d,stroke:#444,color:#eee
+  style B10 fill:#1a1a2e,stroke:#3730a3,color:#a5b4fc
+      </div>
+    </div>
+
+    <!-- Method C: Gemini -->
+    <div class="method-card method-c">
+      <div class="method-title">方法C: Gemini 自動検出</div>
+      <div class="method-sub">extract_acc_gemini.py</div>
+      <div class="mermaid">
+flowchart TD
+  C1(["📁 画像アップロード"])
+  C2["POST /extract/gemini"]
+  C3["Gemini API 呼び出し\n位置検出プロンプト送信\n（画像 + テキスト）"]
+  C4["JSONパース\nx1, y1, x2, y2 取得"]
+  C5["元画像をクロップ\n+20px パディング付き"]
+  C6["rembg 背景除去\nU²-Net"]
+  C7{"黒ピクセル\n除去 ON？"}
+  C8["暗ピクセルを透明化\n（RGB ≤ 閾値）"]
+  C9["タイトクロップ\n（α>10 の最小矩形）"]
+  C10["bbox プレビュー生成\n（オレンジ枠）"]
+  C11(["✅ 透明PNG + プレビュー 出力"])
+
+  C1 --> C2 --> C3 --> C4 --> C5 --> C6 --> C7
+  C7 -- Yes --> C8 --> C9
+  C7 -- No  --> C9
+  C9 --> C10 --> C11
+
+  style C1  fill:#1e1e2e,stroke:#444,color:#aaa
+  style C2  fill:#2d2d2d,stroke:#f59e0b,color:#fde68a
+  style C3  fill:#1c2a1c,stroke:#2d5a2d,color:#86efac
+  style C4  fill:#2d2d2d,stroke:#444,color:#eee
+  style C5  fill:#2d2d2d,stroke:#444,color:#eee
+  style C6  fill:#2d2d2d,stroke:#444,color:#eee
+  style C7  fill:#2a2e1a,stroke:#666,color:#fde68a
+  style C8  fill:#2d2d2d,stroke:#444,color:#eee
+  style C9  fill:#2d2d2d,stroke:#444,color:#eee
+  style C10 fill:#2d2d2d,stroke:#444,color:#eee
+  style C11 fill:#1a1a2e,stroke:#3730a3,color:#a5b4fc
+      </div>
+    </div>
+
+  </div><!-- /methods -->
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#1a1a1a',
+      primaryColor: '#2d2d2d',
+      primaryTextColor: '#eee',
+      primaryBorderColor: '#555',
+      lineColor: '#555',
+      secondaryColor: '#222',
+      tertiaryColor: '#1a1a1a',
+      edgeLabelBackground: '#1a1a1a',
+    },
+    flowchart: { curve: 'basis', padding: 16 },
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+# Web server
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+
+# Image processing
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Background removal (Method A / C)
+rembg>=2.0.50
+
+# Gemini API (Method C)
+google-genai>=1.0.0
+
+# SAM2 (Method B) — install separately:
+# pip install git+https://github.com/facebookresearch/sam2.git
+# torch is a dependency of SAM2
